@@ -26,112 +26,111 @@ OBS8: execute o código, e abra as imagens para conferir se as questões foram d
 from PIL import Image
 import os
 
-def encontrar_faixa_divisoria(imagem, cor_alvo, tolerancia=15, altura_faixa=6):
-    """
-    Procura a linha divisória varrendo a coluna X informada no GIMP.
-    """
+def converter_cor_gimp_para_rgb(gimp_r, gimp_g, gimp_b):
+    r = int((gimp_r / 100) * 255)
+    g = int((gimp_g / 100) * 255)
+    b = int((gimp_b / 100) * 255)
+    return (r, g, b)
+
+def encontrar_faixa_azul(imagem, cor_alvo, tolerancia=20, altura_faixa=4):
     largura, altura = imagem.size
     pixels = imagem.load()
-    
     posicoes_corte = []
     
-    # OBS4: Baseado no seu print do GIMP, a linha passa perfeitamente no X = 68
-    x_pesquisa = 68
+    # =================================================================
+    # ATENÇÃO AQUI: CALIBRAÇÃO DO X
+    # =================================================================
+    # No GIMP, meça a distância da borda preta da esquerda até o início 
+    # da linha divisória da QUESTÃO (logo após a palavra "QUESTÃO 03").
+    # Se a sua imagem branca começa mais para a direita, aumente esse número.
+    x_inicio = 180  
+    largura_verificacao = 50  # Precisa encontrar 50 pixels seguidos da cor da linha
     
     y = 0
     while y < altura - altura_faixa:
         faixa_encontrada = True
         
-        # Verifica se há uma sequência vertical de pixels da cor alvo
         for dy in range(altura_faixa):
-            # Garante que não vai tentar ler fora da largura da imagem por segurança
-            if x_pesquisa >= largura:
-                x_pesquisa = largura - 2
+            for dx in range(largura_verificacao):
+                x_atual = x_inicio + dx
                 
-            pixel = pixels[x_pesquisa, y + dy]
-            r, g, b = pixel[:3]
-            
-            # OBS6: Tolerância para pequenas variações de tons
-            if (abs(r - cor_alvo[0]) > tolerancia or 
-                abs(g - cor_alvo[1]) > tolerancia or 
-                abs(b - cor_alvo[2]) > tolerancia):
-                faixa_encontrada = False
+                if x_atual >= largura:
+                    faixa_encontrada = False
+                    break
+                    
+                pixel = pixels[x_atual, y + dy]
+                r, g, b = pixel[:3]
+                
+                # Se encontrar fundo branco (255, 255, 255) ou o preto de fora, cancela
+                if (abs(r - cor_alvo[0]) > tolerancia or 
+                    abs(g - cor_alvo[1]) > tolerancia or 
+                    abs(b - cor_alvo[2]) > tolerancia):
+                    faixa_encontrada = False
+                    break
+            if not faixa_encontrada:
                 break
         
         if faixa_encontrada:
-            # OBS3/OBS4: Quantos pixels cortar ACIMA do padrão para não raspar no texto
-            pixels_acima = 15  
-            posicao_corte = y - pixels_acima
-            if posicao_corte < 0:
+            # OBS3: Corta 15 pixels ACIMA da linha para não raspar no texto
+            posicao_corte = y - 15  
+            if posicao_corte < 0:  
                 posicao_corte = 0
                 
             posicoes_corte.append(posicao_corte)
-            print(f"Padrão visual encontrado em y={y}. Cortando em y={posicao_corte}")
-            
-            # Pula a faixa encontrada + uma margem para evitar detecção duplicada
-            y += altura_faixa + 30  
+            print(f"Linha divisória REAL detectada em y={y}, ponto de corte y={posicao_corte}")
+            y += altura_faixa + 80  # Pula um espaço para não ler a mesma linha bi-dimensional
         else:
             y += 1
-            
+    
     return posicoes_corte
 
 def dividir_imagem_por_faixas(caminho_imagem, pasta_saida, cor_alvo):
-    """
-    Divide a imagem verticalmente usando os pontos encontrados
-    """
     if not os.path.exists(caminho_imagem):
         print(f"Erro: O arquivo '{caminho_imagem}' não foi encontrado!")
         return
 
     imagem = Image.open(caminho_imagem)
     largura, altura = imagem.size
+    print(f"Imagem carregada com sucesso: {largura}x{altura} pixels")
     
-    print(f"Imagem carregada: {largura}x{altura} pixels")
-    
-    posicoes_corte = encontrar_faixa_divisoria(imagem, cor_alvo)
+    posicoes_corte = encontrar_faixa_azul(imagem, cor_alvo)
     
     if not posicoes_corte:
-        print("Nenhuma faixa divisória encontrada com os valores RGB fornecidos.")
+        print("Nenhuma divisória encontrada! O valor de 'x_inicio' ou o RGB estão incorretos.")
         return
     
-    print(f"Encontradas {len(posicoes_corte)} linhas divisórias para corte")
+    print(f"Sucesso: {len(posicoes_corte)} linhas de corte mapeadas.")
     os.makedirs(pasta_saida, exist_ok=True)
     
     posicao_anterior = 0
-    
     for i, posicao_corte in enumerate(posicoes_corte):
         if posicao_corte <= posicao_anterior:
             continue
             
-        # Recorta a questão correspondente
         area_corte = (0, posicao_anterior, largura, posicao_corte)
         secao = imagem.crop(area_corte)
         
         nome_arquivo = f"questao_{i+1:03d}.png"
         caminho_completo = os.path.join(pasta_saida, nome_arquivo)
         secao.save(caminho_completo)
-        print(f"Salvo: {caminho_completo} ({secao.width}x{secao.height}px)")
+        print(f"Salvo: {caminho_completo}")
         
         posicao_anterior = posicao_corte
     
-    # Salva o bloco da última questão até o final do arquivo
     if posicao_anterior < altura:
         area_corte = (0, posicao_anterior, largura, altura)
         secao = imagem.crop(area_corte)
         nome_arquivo = f"questao_{len(posicoes_corte)+1:03d}.png"
         caminho_completo = os.path.join(pasta_saida, nome_arquivo)
         secao.save(caminho_completo)
-        print(f"Salvo última parte: {caminho_completo}")
+        print(f"Salva última parte: {caminho_completo}")
 
 if __name__ == "__main__":
-    # OBS7: Definição dos arquivos de entrada e saída
     caminho_imagem = "colunas_concatenadas_verticalmente.png"  
-    pasta_saida = "questoes_divididas"                        
-    
-    # Valores RGB obtidos diretamente do seu print do GIMP (image_bb45ab.png)
-    cor_do_padrao = (35, 31, 32) 
-    
-    print(f"Iniciando busca pelo padrão de cor: RGB {cor_do_padrao}")
+    pasta_saida = "questoes_divididas" 
+
+    # Cor RGB aproximada do traço escuro da prova (convertida de porcentagem do GIMP)
+    cor_do_padrao = converter_cor_gimp_para_rgb(13.7, 12.1, 12.5) 
     
     dividir_imagem_por_faixas(caminho_imagem, pasta_saida, cor_do_padrao)
-    print("Divisão de questões concluída com sucesso!")
+    print("Divisão concluída!")

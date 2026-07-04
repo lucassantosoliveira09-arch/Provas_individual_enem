@@ -14,12 +14,12 @@ OBS3: para cada vez que executar esse código, faça:
 - escolha qual padrão novo de nome você vai usar nas linhas 34 a 36. Deixe apenas uma linha descomentada de cada vez. Se são as questões de ingles, use o padrão com sufixo de ingles; se são questões de espanhol, use o padrão com sufixo de espanhol; se são as outras questões, use o padrão sem sufixo de idioma.
 - dentro do padrão novo de nome, faça a conta para transformar o número do antigo no número do novo. Você pode ler o comentário antes dos padrões para saber qual conta fazer
 - execute o código
-"""
+
 
 import os
 
 def renomear_questoes_simples():
-    pasta = "1 - 14" # ATUALIZAR com o nome da pasta das questões que você vai arrumar 
+    pasta = "1a14" # ATUALIZAR com o nome da pasta das questões que você vai arrumar 
     
     if not os.path.exists(pasta):
         print(f"Pasta {pasta} não encontrada!")
@@ -53,3 +53,69 @@ def renomear_questoes_simples():
 # Executar
 if __name__ == "__main__":
     renomear_questoes_simples()
+
+"""
+
+import os
+from PIL import Image
+
+def renomear_flexivel():
+    pasta_alvo = "15a23"
+    
+    if not os.path.exists(pasta_alvo):
+        print(f"Erro: A pasta '{pasta_alvo}' não existe.")
+        return
+
+    arquivos = [f for f in os.listdir(pasta_alvo) if f.endswith('.png')]
+    
+    arquivos_filtrados = []
+    for f in arquivos:
+        if "-a-" in f or not f.startswith("questao-"):
+            arquivos_filtrados.append(f)
+            
+    if not arquivos_filtrados:
+        print("Nenhum arquivo pendente de correção encontrado na pasta!")
+        return
+
+    print(f"Encontrados {len(arquivos_filtrados)} arquivos para renomear.")
+    print("Se a foto tiver mais de uma questão, digite os números separados (ex: 4-e-5 ou 12_13).\n")
+
+    for i, arquivo_atual in enumerate(arquivos_filtrados):
+        caminho_completo = os.path.join(pasta_alvo, arquivo_atual)
+        
+        try:
+            with Image.open(caminho_completo) as imagem:
+                imagem.show()
+            
+            entrada = input(f"[{i+1}/{len(arquivos_filtrados)}] Número(s) da questão para '{arquivo_atual}'? (ou 'sair'): ").strip()
+            
+            if entrada.lower() == 'sair':
+                print("Processo interrompido.")
+                break
+                
+            if not entrada:
+                print("⚠️ Entrada vazia. Pulando arquivo...\n")
+                continue
+            
+            # ALTERADO: Agora aceita traços, letras e underlines para casos de múltiplas questões
+            # Substitui espaços por hífens para manter o nome do arquivo limpo
+            identificador = entrada.replace(" ", "-")
+            novo_nome = f"questao-{identificador}.png"
+            caminho_novo = os.path.join(pasta_alvo, novo_nome)
+            
+            contador = 1
+            while os.path.exists(caminho_novo):
+                novo_nome = f"questao-{identificador}_parte{contador}.png"
+                caminho_novo = os.path.join(pasta_alvo, novo_nome)
+                contador += 1
+            
+            os.rename(caminho_completo, caminho_novo)
+            print(f"✅ Renomeado: '{arquivo_atual}' -> '{novo_nome}'\n")
+            
+        except Exception as e:
+            print(f"💥 Erro ao processar o arquivo {arquivo_atual}: {e}")
+
+    print("Processo finalizado!")
+
+if __name__ == "__main__":
+    renomear_flexivel()
